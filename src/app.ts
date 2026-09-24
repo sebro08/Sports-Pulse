@@ -1,7 +1,7 @@
 import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
 import { randomUUID } from 'node:crypto';
-import type { Database } from './database/pool.js';
-import { healthRoutes } from './routes/health.js';
+import type { Database } from './shared/database/pool.js';
+import { healthRoutes } from './modules/health/routes.js';
 
 export interface AppDeps {
   db: Pick<Database, 'ping'>;

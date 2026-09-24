@@ -6,7 +6,7 @@ import { createPool } from './pool.js';
 /** Runner minimo: aplica migrations/*.sql en orden, cada una en una transaccion. */
 async function main(): Promise<void> {
   const pool = createPool(loadEnv());
-  const dir = path.resolve('migrations');
+  const dir = path.resolve('db/migrations');
   try {
     await pool.query(
       `CREATE TABLE IF NOT EXISTS schema_migrations (

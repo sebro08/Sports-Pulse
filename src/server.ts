@@ -1,6 +1,6 @@
 import { buildApp } from './app.js';
-import { loadEnv } from './config/env.js';
-import { createPool, toDatabase } from './database/pool.js';
+import { loadEnv } from './shared/config/env.js';
+import { createPool, toDatabase } from './shared/database/pool.js';
 
 async function main(): Promise<void> {
   const env = loadEnv();

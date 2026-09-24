@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify';
-import type { Database } from '../database/pool.js';
+import type { Database } from '../../shared/database/pool.js';
 
 interface HealthOptions {
   db: Pick<Database, 'ping'>;
