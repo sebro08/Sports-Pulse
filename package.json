@@ -14,7 +14,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "ingest": "tsx --env-file=.env src/ingestion/cli.ts"
   },
   "dependencies": {
     "fastify": "^5.0.0",
