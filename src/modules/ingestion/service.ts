@@ -10,9 +10,9 @@ import {
   upsertTeam,
   type RunStatus,
 } from './repository.js';
-import { competitionsUrl, matchesUrl } from './statsbomb/client.js';
-import { toKickoff, toMatchStatus } from './statsbomb/mapper.js';
-import { competitionEntrySchema, matchSchema, type StatsBombMatch } from './statsbomb/schemas.js';
+import { competitionsUrl, matchesUrl } from './sources/statsbomb/client.js';
+import { toKickoff, toMatchStatus } from './sources/statsbomb/mapper.js';
+import { competitionEntrySchema, matchSchema, type StatsBombMatch } from './sources/statsbomb/schemas.js';
 import { parseRecords } from './validation.js';
 
 export const STATSBOMB_SOURCE = { code: 'statsbomb-open-data', name: 'StatsBomb Open Data' };

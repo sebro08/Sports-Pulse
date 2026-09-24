@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fetchJson, HttpError } from '../../src/ingestion/http.js';
+import { fetchJson, HttpError } from '../../src/modules/ingestion/http.js';
 
 const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
   new Response(JSON.stringify(body), { status, headers });

@@ -1,11 +1,11 @@
 import { parseArgs } from 'node:util';
 import { z } from 'zod';
-import { loadEnv } from '../config/env.js';
-import { createPool } from '../database/pool.js';
+import { loadEnv } from '../../shared/config/env.js';
+import { createPool } from '../../shared/database/pool.js';
 import { fetchJson } from './http.js';
 import { ingestStatsBomb } from './service.js';
-import { competitionsUrl } from './statsbomb/client.js';
-import { competitionEntrySchema } from './statsbomb/schemas.js';
+import { competitionsUrl } from './sources/statsbomb/client.js';
+import { competitionEntrySchema } from './sources/statsbomb/schemas.js';
 import { parseRecords } from './validation.js';
 
 const id = z.coerce.number().int().positive();

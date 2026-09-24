@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { toKickoff, toMatchStatus } from '../../src/ingestion/statsbomb/mapper.js';
-import { matchSchema } from '../../src/ingestion/statsbomb/schemas.js';
-import { matchesUrl } from '../../src/ingestion/statsbomb/client.js';
-import { parseRecords } from '../../src/ingestion/validation.js';
+import { toKickoff, toMatchStatus } from '../../src/modules/ingestion/sources/statsbomb/mapper.js';
+import { matchSchema } from '../../src/modules/ingestion/sources/statsbomb/schemas.js';
+import { matchesUrl } from '../../src/modules/ingestion/sources/statsbomb/client.js';
+import { parseRecords } from '../../src/modules/ingestion/validation.js';
 
 // Datos de ejemplo inventados (no son partidos reales).
 const sample = {
