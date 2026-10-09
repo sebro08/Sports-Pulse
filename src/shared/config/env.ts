@@ -5,6 +5,10 @@ const schema = z.object({
   HOST: z.string().default('0.0.0.0'),
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
+  DOCS_ENABLED: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((v) => v === 'true'),
   DATABASE_HOST: z.string().min(1),
   DATABASE_PORT: z.coerce.number().int().default(5432),
   DATABASE_NAME: z.string().min(1),

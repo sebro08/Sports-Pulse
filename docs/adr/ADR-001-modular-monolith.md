@@ -1,27 +1,25 @@
-# ADR-001: Monolito modular en lugar de monorepo o microservicios
+# ADR-001: Modular monolith instead of monorepo or microservices
 
 ## Context
-SportsPulse tiene un unico proceso desplegable (API) y un CLI de ingestion que comparte
-codigo y base de datos con la API. No existe frontend en el MVP y el roadmap descarta
-arquitecturas distribuidas innecesarias.
+SportsPulse has one deployable API process plus an ingestion CLI that shares code and database with it.
+There is no frontend in the MVP, and the roadmap explicitly avoids unnecessary distributed complexity.
 
 ## Decision
-Un solo paquete organizado por modulos de negocio (`src/modules/*`) mas codigo transversal
-(`src/shared/*`). Las fronteras se hacen cumplir con reglas de ESLint (`no-restricted-imports`):
-- `shared/` no importa de `modules/`.
-- Un modulo no importa de otro; se componen en `app.ts` o se comunican via `shared/`.
+Single package organized by business module (`src/modules/*`) plus cross-cutting code (`src/shared/*`).
+Boundaries are enforced with ESLint `no-restricted-imports`:
+- `shared/` does not import from `modules/`.
+- A module does not import from another module; they are composed in `app.ts` or communicate via `shared/`.
 
-Los ADR se numeran cronologicamente; los ADR planificados en el roadmap (PostgreSQL, Redis,
-Container Apps...) se crean con el siguiente numero libre cuando se tome cada decision.
+ADRs are numbered chronologically; decisions planned in the roadmap (PostgreSQL, Redis, Container Apps, ...)
+get the next free number when each decision is made.
 
 ## Alternatives
-- Organizar por capa tecnica (`controllers/`, `services/`, `repositories/`): mezcla dominios distintos.
-- Monorepo con workspaces (`apps/api`, `apps/web`, `packages/*`): util con 2+ aplicaciones
-  desplegables; hoy anade configuracion (tsconfig, Docker, CI por paquete) sin beneficio.
-- Microservicios: complejidad operativa injustificada para este alcance.
+- Layer-first folders (`controllers/`, `services/`, `repositories/`): mixes unrelated domains.
+- Monorepo with workspaces (`apps/api`, `apps/web`, `packages/*`): worthwhile with 2+ deployable apps; today
+  it only adds per-package tsconfig/Docker/CI overhead.
+- Microservices: operational cost not justified at this scope.
 
 ## Consequences
-- Bajo coste operativo y de CI hoy.
-- Limites de dependencia verificados automaticamente en CI (`npm run lint`).
-- Cuando exista un frontend o un worker independiente, migrar a `apps/` + `packages/` es
-  mecanico porque los modulos ya estan aislados.
+- Low operational and CI cost now; dependency limits verified automatically in CI (`npm run lint`).
+- When a frontend or an independent worker appears, moving to `apps/` + `packages/` is mechanical because
+  modules are already isolated.

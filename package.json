@@ -18,9 +18,12 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@fastify/swagger": "^9.9.2",
+    "@fastify/swagger-ui": "^6.1.2",
     "fastify": "^5.0.0",
     "pg": "^8.13.0",
-    "zod": "^3.23.8"
+    "zod": "^3.23.8",
+    "zod-to-json-schema": "^3.25.2"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",
