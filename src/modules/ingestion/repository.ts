@@ -1,12 +1,4 @@
-import type { QueryResult, QueryResultRow } from 'pg';
-
-/** Lo minimo que necesitamos de Pool y PoolClient. */
-export interface Queryable {
-  query<R extends QueryResultRow = QueryResultRow>(
-    text: string,
-    values?: unknown[],
-  ): Promise<QueryResult<R>>;
-}
+import type { Queryable } from '../../shared/database/queryable.js';
 
 export type RunStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'PARTIAL';
 

@@ -1,27 +1,31 @@
-# Gestion de datos
+# Data management
 
-## Fuente: StatsBomb Open Data
-- Origen: https://github.com/statsbomb/open-data (JSON publicos).
-- **Atribucion obligatoria:** si publicas o compartes analisis basados en estos datos, cita a StatsBomb como fuente y usa su logo (Media Pack). Incluirlo en el README y en cualquier demo.
-- Uso: proyecto personal de portfolio / investigacion. Revisar su User Agreement antes de publicar.
+## Source: StatsBomb Open Data
+- Origin: https://github.com/statsbomb/open-data (public JSON files).
+- **Attribution required:** when publishing analysis or demos based on this data, credit StatsBomb as the
+  source and use their logo per their user agreement. Keep this notice in the README and any demo.
+- Use: personal portfolio / research project. Re-check their terms before any public release.
 
-## Clasificacion
-| Dato | Clasificacion |
-|---|---|
-| Competiciones, temporadas, equipos, partidos | PUBLIC |
-| ingestion_runs (metadata interna) | INTERNAL |
+## Classification
+| Data | Class | Exposed by API |
+|---|---|---|
+| Competitions, seasons, teams, matches | PUBLIC | Yes |
+| `ingestion_runs`, `ingestion_run_id`, `external_id` | INTERNAL | No |
+| Database credentials, API keys | SECRET | Never (Key Vault in production) |
 
-No se almacenan datos personales. Solo se ingiere lo necesario para el MVP (sin eventos ni alineaciones todavia).
+No personal data is stored. Only what the MVP needs is ingested (no events or line-ups yet).
 
 ## Ingestion
-- Flujo: catalogo -> partidos -> validacion por registro (Zod) -> transaccion unica -> upsert.
-- **Idempotente:** `UNIQUE(source_id, idempotency_key)` en `ingestion_runs` + `ON CONFLICT DO UPDATE` en cada tabla. Repetir una corrida no duplica filas. Una corrida COMPLETED con la misma clave se omite; FAILED/PARTIAL se reintentan.
-- Clave por defecto: `statsbomb:c{competicion}:s{temporada}:{fecha}`.
-- Estados: RUNNING -> COMPLETED | PARTIAL (hubo registros rechazados) | FAILED.
-- Resiliencia HTTP: timeout, reintentos con backoff exponencial + jitter en timeout/429/5xx; sin reintento en 4xx.
-- Anti-SSRF: las URLs se construyen a partir de una base fija y ids enteros validados.
+- Flow: catalog -> matches -> per-record Zod validation -> single transaction -> upserts.
+- **Idempotent:** `UNIQUE(source_id, idempotency_key)` + `ON CONFLICT DO UPDATE`. A COMPLETED run with the same
+  key is skipped; FAILED/PARTIAL runs are retried.
+- Default key: `statsbomb:c{competition}:s{season}:{date}`; override with `--key`.
+- States: RUNNING -> COMPLETED | PARTIAL (some records rejected) | FAILED.
+- HTTP resilience: timeout, exponential backoff with jitter, `Retry-After` honored; retries only timeouts,
+  network errors, 429 and 502/503/504/500; never 4xx or invalid JSON.
+- Anti-SSRF: URLs are built from a fixed base and validated integer ids; users cannot supply URLs.
 
-## Limitaciones conocidas
-- `kickoff_at`: StatsBomb entrega hora local del estadio sin zona horaria; se guarda como UTC (aproximacion).
-- Los registros rechazados se registran en el log y se cuentan en `records_rejected`, pero aun no hay tabla de rechazados.
-- Los datos crudos aun no se guardan en Blob Storage (pendiente para la fase Azure).
+## Known limitations
+- `kickoff_at`: the source gives local stadium time without a timezone; it is stored as UTC (approximation).
+- Rejected records are logged and counted (`records_rejected`) but not yet persisted.
+- Raw payloads are not yet archived to Blob Storage; no circuit breaker yet.

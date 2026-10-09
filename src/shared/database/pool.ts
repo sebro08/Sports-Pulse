@@ -1,7 +1,13 @@
 import pg from 'pg';
+import type { QueryResultRow } from 'pg';
 import type { Env } from '../config/env.js';
+import type { Queryable } from './queryable.js';
 
-export interface Database {
+// bigint (int8) llega como string por defecto. Los ids y conteos de este proyecto
+// caben de sobra en 2^53, asi que se parsean como number (tipos y JSON consistentes).
+pg.types.setTypeParser(pg.types.builtins.INT8, (value: string) => Number(value));
+
+export interface Database extends Queryable {
   ping(): Promise<void>;
   close(): Promise<void>;
 }
@@ -28,6 +34,9 @@ export function toDatabase(pool: pg.Pool): Database {
     },
     async close() {
       await pool.end();
+    },
+    query<R extends QueryResultRow = QueryResultRow>(text: string, values?: unknown[]) {
+      return pool.query<R>(text, values);
     },
   };
 }

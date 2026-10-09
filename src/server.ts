@@ -5,7 +5,7 @@ import { createPool, toDatabase } from './shared/database/pool.js';
 async function main(): Promise<void> {
   const env = loadEnv();
   const db = toDatabase(createPool(env));
-  const app = buildApp({ db }, { logLevel: env.LOG_LEVEL });
+  const app = buildApp({ db }, { logLevel: env.LOG_LEVEL, docs: env.DOCS_ENABLED });
 
   const shutdown = async (signal: string): Promise<void> => {
     app.log.info({ signal }, 'shutting down');
