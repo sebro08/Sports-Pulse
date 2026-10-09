@@ -3,8 +3,10 @@ import fastifySwaggerUi from '@fastify/swagger-ui';
 import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
 import { randomUUID } from 'node:crypto';
 import { ZodError } from 'zod';
+import type { CacheTtl } from './modules/catalog/service.js';
 import { catalogRoutes } from './modules/catalog/routes.js';
 import { healthRoutes } from './modules/health/routes.js';
+import type { Cache } from './shared/cache/types.js';
 import type { Database } from './shared/database/pool.js';
 import { AppError } from './shared/http/errors.js';
 import {
@@ -15,6 +17,8 @@ import {
 
 export interface AppDeps {
   db: Pick<Database, 'ping' | 'query'>;
+  cache: Cache;
+  cacheTtl?: CacheTtl;
 }
 
 export interface AppOptions {
@@ -62,7 +66,6 @@ export function buildApp(deps: AppDeps, opts: AppOptions = {}): FastifyInstance 
     reply.header('x-request-id', req.id);
   });
 
-  // Formato de error consistente; nunca filtra detalles internos en 5xx.
   app.setErrorHandler((err: FastifyError, req, reply) => {
     const send = (status: number, code: string, message: string, details?: Detail[]) =>
       reply.status(status).send({
@@ -88,7 +91,6 @@ export function buildApp(deps: AppDeps, opts: AppOptions = {}): FastifyInstance 
     });
   });
 
-  // Documentacion primero: @fastify/swagger observa las rutas registradas despues.
   if (opts.docs ?? true) {
     app.register(fastifySwagger, {
       openapi: {
@@ -106,8 +108,10 @@ export function buildApp(deps: AppDeps, opts: AppOptions = {}): FastifyInstance 
     app.register(fastifySwaggerUi, { routePrefix: '/docs' });
   }
 
-  app.register(healthRoutes, { db: deps.db });
-  app.register(catalogRoutes, { db: deps.db, prefix: '/api/v1' });
+  const ttl = deps.cacheTtl ?? { list: 60, detail: 120 };
+
+  app.register(healthRoutes, { db: deps.db, cache: deps.cache });
+  app.register(catalogRoutes, { db: deps.db, cache: deps.cache, ttl, prefix: '/api/v1' });
 
   return app;
 }

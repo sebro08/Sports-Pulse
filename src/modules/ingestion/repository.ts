@@ -14,10 +14,6 @@ export async function ensureSource(db: Queryable, code: string, name: string): P
   return row.id;
 }
 
-/**
- * Inicia (o reanuda) una corrida. Si ya existe una COMPLETED con la misma
- * idempotency key, no la toca y avisa para que se omita el trabajo.
- */
 export async function startRun(
   db: Queryable,
   sourceId: number,

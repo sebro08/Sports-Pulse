@@ -15,7 +15,6 @@ const dateOnly = z
 
 export const matchStatus = z.enum(['SCHEDULED', 'LIVE', 'FINISHED', 'POSTPONED', 'CANCELLED']);
 
-// ---------- Parametros de entrada
 export const idParams = z.object({ id });
 
 export const competitionsQuery = paginationQuery.extend({
@@ -57,7 +56,6 @@ export type SeasonsQuery = z.infer<typeof seasonsQuery>;
 export type TeamsQuery = z.infer<typeof teamsQuery>;
 export type MatchesQuery = z.infer<typeof matchesQuery>;
 
-// ---------- Respuestas (solo lo que es PUBLIC; ids/columnas internas no se exponen)
 export const competitionSchema = z.object({
   id: z.number().int(),
   name: z.string(),

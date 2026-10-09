@@ -8,7 +8,6 @@ import type { Queryable } from './queryable.js';
  */
 
 export interface Condition {
-  /** Fragmento SQL con uno o mas '?' que se sustituyen por el mismo parametro. */
   sql: string;
   value: unknown;
 }
@@ -43,14 +42,12 @@ export function orderBy(
   const desc = sort.startsWith('-');
   const column = columns[desc ? sort.slice(1) : sort];
   if (!column) throw new Error(`unsupported sort: ${sort}`);
-  // Desempate por id: sin el, la paginacion puede repetir u omitir filas.
   return `ORDER BY ${column} ${desc ? 'DESC' : 'ASC'}, ${tieBreaker} ASC`;
 }
 
 export interface PageOptions {
   select: string;
   from: string;
-  /** FROM mas simple para el COUNT (sin joins innecesarios). */
   countFrom?: string;
   where: WhereClause;
   order: string;

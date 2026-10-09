@@ -1,6 +1,5 @@
 import { z } from 'zod';
 
-/** Error esperado (4xx) con codigo estable para los clientes. */
 export class AppError extends Error {
   statusCode: number;
   code: string;
@@ -20,7 +19,6 @@ export class NotFoundError extends AppError {
   }
 }
 
-/** Forma unica de todos los errores de la API (tambien documenta OpenAPI). */
 export const errorResponseSchema = z.object({
   error: z.object({
     code: z.string(),

@@ -1,7 +1,5 @@
 import { z } from 'zod';
 
-// Los campos desconocidos se descartan (z.object elimina claves extra por defecto).
-
 export const competitionEntrySchema = z.object({
   competition_id: z.number().int().positive(),
   season_id: z.number().int().positive(),
@@ -11,14 +9,14 @@ export const competitionEntrySchema = z.object({
 });
 export type CompetitionEntry = z.infer<typeof competitionEntrySchema>;
 
+const isRealDate = (d: string): boolean => {
+  const t = Date.parse(`${d}T00:00:00Z`);
+  return !Number.isNaN(t) && new Date(t).toISOString().slice(0, 10) === d;
+};
 const dateString = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/)
-  .refine((d) => {
-    // Date.parse "rueda" fechas imposibles (02-30 -> 03-02), asi que se compara ida y vuelta.
-    const t = Date.parse(`${d}T00:00:00Z`);
-    return !Number.isNaN(t) && new Date(t).toISOString().slice(0, 10) === d;
-  }, 'not a real calendar date');
+  .refine(isRealDate, 'not a real calendar date');
 
 export const matchSchema = z
   .object({

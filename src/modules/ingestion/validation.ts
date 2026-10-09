@@ -5,7 +5,6 @@ export interface RejectedRecord {
   issues: string[];
 }
 
-/** Valida registro a registro: un registro malo se rechaza, no tumba toda la ingestion. */
 export function parseRecords<S extends z.ZodTypeAny>(
   schema: S,
   items: unknown[],
