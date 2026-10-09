@@ -1,7 +1,8 @@
-import Redis from 'ioredis';
+import { Redis } from 'ioredis';
 import type { Env } from '../config/env.js';
 import { nullCache, wrapRedis, type RedisLike } from './redis-cache.js';
 import type { Cache, Logger } from './types.js';
+
 
 /**
  * Crea el cliente real de Redis. IMPORTANTE: ioredis es un EventEmitter y, por
@@ -12,7 +13,6 @@ import type { Cache, Logger } from './types.js';
  */
 export function createRedisCache(env: Env, log: Logger = () => {}): { cache: Cache; close: () => Promise<void> } {
   if (!env.REDIS_ENABLED) return { cache: nullCache(), close: async () => {} };
-
   const client = new Redis({
     host: env.REDIS_HOST,
     port: env.REDIS_PORT,
