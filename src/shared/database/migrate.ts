@@ -3,7 +3,7 @@ import path from 'node:path';
 import { loadEnv } from '../config/env.js';
 import { createPool } from './pool.js';
 
-/** Runner minimo: aplica migrations/*.sql en orden, cada una en una transaccion. */
+/** Runner minimo: aplica db/migrations/*.sql en orden, cada una en una transaccion. */
 async function main(): Promise<void> {
   const pool = createPool(loadEnv());
   const dir = path.resolve('db/migrations');

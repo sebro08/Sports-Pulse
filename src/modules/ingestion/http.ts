@@ -1,9 +1,3 @@
-/**
- * Cliente HTTP resiliente para la ingestion: timeout, reintentos con backoff exponencial
- * y jitter completo. Reintenta timeouts, errores de red, 429 y 5xx transitorios.
- * NO reintenta 400/401/403/404 ni JSON invalido.
- */
-
 export class HttpError extends Error {
   status: number;
   retryAfterMs: number | undefined;
@@ -40,8 +34,8 @@ const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
 
 export function isRetryable(err: unknown): boolean {
   if (err instanceof HttpError) return RETRYABLE_STATUS.has(err.status);
-  if (err instanceof SyntaxError) return false; // JSON invalido: reintentar no lo arregla
-  return true; // timeout, DNS, conexion reseteada...
+  if (err instanceof SyntaxError) return false;
+  return true;
 }
 
 function parseRetryAfter(value: string | null): number | undefined {
@@ -76,7 +70,7 @@ export async function fetchJson(
       const delay =
         err instanceof HttpError && err.retryAfterMs !== undefined
           ? Math.min(err.retryAfterMs, opts.maxDelayMs)
-          : Math.floor(random() * cap); // full jitter
+          : Math.floor(random() * cap);
       await sleep(delay);
     }
   }

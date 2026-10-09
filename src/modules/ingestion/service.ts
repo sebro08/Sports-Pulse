@@ -20,7 +20,6 @@ export const STATSBOMB_SOURCE = { code: 'statsbomb-open-data', name: 'StatsBomb 
 export interface IngestParams {
   competitionId: number;
   seasonId: number;
-  /** Por defecto: una corrida por competicion/temporada/dia. */
   idempotencyKey?: string;
 }
 
@@ -60,7 +59,6 @@ export async function ingestStatsBomb(
   log('run started', { runId: run.id, key });
 
   try {
-    // 1. Catalogo: confirmar que la competicion/temporada existe en la fuente.
     const catalog = await get(competitionsUrl());
     if (!Array.isArray(catalog)) throw new Error('competitions.json is not an array');
     const { valid: entries } = parseRecords(competitionEntrySchema, catalog);
@@ -71,7 +69,6 @@ export async function ingestStatsBomb(
       throw new Error(`competition ${competitionId} / season ${seasonId} not found in catalog`);
     }
 
-    // 2. Partidos: validar registro a registro.
     const raw = await get(matchesUrl(competitionId, seasonId));
     if (!Array.isArray(raw)) throw new Error('matches file is not an array');
     const { valid, rejected } = parseRecords(matchSchema, raw);
@@ -81,7 +78,6 @@ export async function ingestStatsBomb(
       throw new Error(`all ${rejected.length} match records were rejected`);
     }
 
-    // 3. Persistir en una sola transaccion (todo o nada).
     await persist(pool, sourceId, run.id, entry, valid);
 
     const status: RunStatus = rejected.length > 0 ? 'PARTIAL' : 'COMPLETED';

@@ -1,8 +1,3 @@
-/**
- * Endpoints autorizados de StatsBomb Open Data.
- * Anti-SSRF: la base es una constante y solo se interpolan enteros validados;
- * nunca se acepta una URL proporcionada por el usuario.
- */
 const BASE = 'https://raw.githubusercontent.com/statsbomb/open-data/master/data';
 
 function assertId(value: number, name: string): void {

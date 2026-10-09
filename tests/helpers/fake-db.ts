@@ -6,12 +6,10 @@ export interface RecordedCall {
 }
 
 export interface FakeDbOptions {
-  /** Filas a devolver segun el SQL recibido. */
   rows?: (text: string, values?: unknown[]) => unknown[];
   pingFails?: boolean;
 }
 
-/** Base de datos falsa: registra cada consulta para poder inspeccionar SQL y parametros. */
 export function fakeDb(options: FakeDbOptions = {}) {
   const calls: RecordedCall[] = [];
   return {

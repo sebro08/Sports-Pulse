@@ -7,11 +7,6 @@ import type {
 import { z, type ZodTypeAny } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 
-/**
- * Adaptador minimo Zod <-> Fastify (validacion, serializacion, tipos y OpenAPI).
- * Un solo esquema Zod define: la validacion de entrada, el tipo de TypeScript,
- * la forma de la respuesta y la documentacion OpenAPI.
- */
 export interface ZodTypeProvider extends FastifyTypeProvider {
   validator: this['schema'] extends ZodTypeAny ? z.output<this['schema']> : unknown;
   serializer: this['schema'] extends ZodTypeAny ? z.input<this['schema']> : unknown;
@@ -28,7 +23,6 @@ export const validatorCompiler: FastifySchemaCompiler<unknown> =
     return result.success ? { value: result.data } : { error: result.error };
   };
 
-/** Serializa validando contra el esquema: nunca sale un campo que el esquema no declare. */
 export const serializerCompiler: FastifySerializerCompiler<unknown> =
   ({ schema }) =>
   (data) =>
@@ -44,7 +38,6 @@ const toJsonSchema = (schema: unknown): unknown => {
   return json;
 };
 
-/** Para `@fastify/swagger`: convierte los esquemas Zod de cada ruta a JSON Schema. */
 export const jsonSchemaTransform = ({
   schema,
   url,

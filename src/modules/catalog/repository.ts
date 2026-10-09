@@ -13,7 +13,6 @@ import type {
   TeamsQuery,
 } from './schemas.js';
 
-// Lista blanca de columnas ordenables (nunca se interpola el texto del usuario).
 const COMPETITION_SORT = { id: 'c.id', name: 'c.name', country: 'c.country' };
 const SEASON_SORT = { id: 's.id', name: 's.name' };
 const TEAM_SORT = { id: 't.id', name: 't.name', country: 't.country' };
@@ -21,7 +20,6 @@ const MATCH_SORT = { id: 'm.id', kickoff: 'm.kickoff_at' };
 
 const iso = (value: Date | string): string => new Date(value).toISOString();
 
-// ---------- Competitions
 export async function listCompetitions(
   db: Queryable,
   q: CompetitionsQuery,
@@ -40,7 +38,6 @@ export async function listCompetitions(
   });
 }
 
-// ---------- Seasons
 interface SeasonRow {
   id: number;
   competition_id: number;
@@ -80,7 +77,6 @@ export async function listSeasons(
   };
 }
 
-// ---------- Teams
 export async function listTeams(
   db: Queryable,
   q: TeamsQuery,
@@ -117,7 +113,6 @@ export async function findTeam(db: Queryable, id: number): Promise<TeamDetail | 
   return { id: r.id, name: r.name, country: r.country, source: r.source, matchCount: Number(r.match_count) };
 }
 
-// ---------- Matches
 interface MatchRow {
   id: number;
   season_id: number;
@@ -160,7 +155,6 @@ export async function listMatches(
   db: Queryable,
   q: MatchesQuery,
 ): Promise<{ rows: MatchSummary[]; total: number }> {
-  // "to" es inclusivo: se compara contra el inicio del dia siguiente (UTC).
   const toExclusive = q.to
     ? new Date(new Date(`${q.to}T00:00:00Z`).getTime() + 86_400_000).toISOString()
     : undefined;

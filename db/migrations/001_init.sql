@@ -1,9 +1,6 @@
--- SportsPulse: esquema inicial (Fase 2, version minima).
--- Jugadores, eventos y estadisticas llegan en migraciones posteriores.
-
 CREATE TABLE data_sources (
   id          smallint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  code        text NOT NULL UNIQUE,            -- ej. 'statsbomb-open-data'
+  code        text NOT NULL UNIQUE,
   name        text NOT NULL,
   created_at  timestamptz NOT NULL DEFAULT now()
 );
@@ -21,7 +18,7 @@ CREATE TABLE ingestion_runs (
   started_at         timestamptz,
   finished_at        timestamptz,
   CHECK (finished_at IS NULL OR started_at IS NULL OR finished_at >= started_at),
-  UNIQUE (source_id, idempotency_key)          -- base de la ingestion idempotente
+  UNIQUE (source_id, idempotency_key)
 );
 
 CREATE TABLE competitions (
@@ -39,7 +36,7 @@ CREATE TABLE seasons (
   id              bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   competition_id  bigint NOT NULL REFERENCES competitions(id) ON DELETE CASCADE,
   external_id     text NOT NULL,
-  name            text NOT NULL,               -- ej. '2015/2016'
+  name            text NOT NULL,
   start_date      date,
   end_date        date,
   CHECK (end_date IS NULL OR start_date IS NULL OR end_date >= start_date),
@@ -69,7 +66,7 @@ CREATE TABLE matches (
                    CHECK (status IN ('SCHEDULED','LIVE','FINISHED','POSTPONED','CANCELLED')),
   home_score       smallint CHECK (home_score >= 0),
   away_score       smallint CHECK (away_score >= 0),
-  ingestion_run_id uuid REFERENCES ingestion_runs(id),  -- trazabilidad del origen
+  ingestion_run_id uuid REFERENCES ingestion_runs(id),
   created_at       timestamptz NOT NULL DEFAULT now(),
   updated_at       timestamptz NOT NULL DEFAULT now(),
   CHECK (home_team_id <> away_team_id),
