@@ -1,4 +1,5 @@
 import type { Pool } from 'pg';
+import type { Queryable } from '../../shared/database/queryable.js';
 import { fetchJson } from './http.js';
 import {
   ensureSource,
@@ -8,6 +9,7 @@ import {
   upsertMatch,
   upsertSeason,
   upsertTeam,
+  type RunClaim,
   type RunStatus,
 } from './repository.js';
 import { competitionsUrl, matchesUrl } from './sources/statsbomb/client.js';
@@ -21,6 +23,8 @@ export interface IngestParams {
   competitionId: number;
   seasonId: number;
   idempotencyKey?: string;
+  /** Quien lanza la corrida (sub del token o 'cli'); queda guardado para auditoria. */
+  triggeredBy?: string;
 }
 
 export interface IngestDeps {
@@ -37,26 +41,35 @@ export interface IngestResult {
   error?: string;
 }
 
-export async function ingestStatsBomb(
+export interface ClaimedRun {
+  runId: string;
+  claim: RunClaim;
+  sourceId: number;
+}
+
+/** Paso 1 (rapido): registra/reclama la corrida en la BD. Decide si hay que ejecutar o no. */
+export async function claimRun(db: Queryable, params: IngestParams): Promise<ClaimedRun> {
+  const { competitionId, seasonId } = params;
+  const sourceId = await ensureSource(db, STATSBOMB_SOURCE.code, STATSBOMB_SOURCE.name);
+  const key =
+    params.idempotencyKey ??
+    `statsbomb:c${competitionId}:s${seasonId}:${new Date().toISOString().slice(0, 10)}`;
+  const run = await startRun(db, sourceId, key, params.triggeredBy ?? 'unknown');
+  return { runId: run.id, claim: run.claim, sourceId };
+}
+
+/** Paso 2 (lento): descarga, valida y persiste. Solo se llama si `claim === 'started'`. */
+export async function executeRun(
   pool: Pool,
+  run: ClaimedRun,
   params: IngestParams,
   deps: IngestDeps = {},
 ): Promise<IngestResult> {
   const get = deps.fetchJson ?? fetchJson;
   const log = deps.log ?? (() => {});
   const { competitionId, seasonId } = params;
-
-  const sourceId = await ensureSource(pool, STATSBOMB_SOURCE.code, STATSBOMB_SOURCE.name);
-  const key =
-    params.idempotencyKey ??
-    `statsbomb:c${competitionId}:s${seasonId}:${new Date().toISOString().slice(0, 10)}`;
-
-  const run = await startRun(pool, sourceId, key);
-  if (run.alreadyCompleted) {
-    log('run already completed for this idempotency key, skipping', { runId: run.id, key });
-    return { runId: run.id, status: 'COMPLETED', processed: 0, rejected: 0, skipped: true };
-  }
-  log('run started', { runId: run.id, key });
+  const { runId, sourceId } = run;
+  log('run started', { runId, triggeredBy: params.triggeredBy });
 
   try {
     const catalog = await get(competitionsUrl());
@@ -78,31 +91,56 @@ export async function ingestStatsBomb(
       throw new Error(`all ${rejected.length} match records were rejected`);
     }
 
-    await persist(pool, sourceId, run.id, entry, valid);
+    await persist(pool, sourceId, runId, entry, valid);
 
     const status: RunStatus = rejected.length > 0 ? 'PARTIAL' : 'COMPLETED';
-    await finishRun(pool, run.id, status, valid.length, rejected.length);
-    log('run finished', { runId: run.id, status, processed: valid.length, rejected: rejected.length });
-    return {
-      runId: run.id,
-      status,
-      processed: valid.length,
-      rejected: rejected.length,
-      skipped: false,
-    };
+    await finishRun(pool, runId, status, valid.length, rejected.length);
+    log('run finished', { runId, status, processed: valid.length, rejected: rejected.length });
+    return { runId, status, processed: valid.length, rejected: rejected.length, skipped: false };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    await finishRun(pool, run.id, 'FAILED', 0, 0, message);
-    log('run failed', { runId: run.id, error: message });
-    return {
-      runId: run.id,
-      status: 'FAILED',
-      processed: 0,
-      rejected: 0,
-      skipped: false,
-      error: message,
-    };
+    await finishRun(pool, runId, 'FAILED', 0, 0, message);
+    log('run failed', { runId, error: message });
+    return { runId, status: 'FAILED', processed: 0, rejected: 0, skipped: false, error: message };
   }
+}
+
+/**
+ * ¿La corrida escribio datos? (COMPLETED o PARTIAL, ya con COMMIT hecho). Si es asi, el que
+ * la ejecuto debe invalidar el cache del catalogo. FAILED hizo ROLLBACK y una corrida
+ * omitida no toco nada: en ambos casos el cache sigue siendo valido.
+ */
+export function changedData(result: IngestResult): boolean {
+  return !result.skipped && (result.status === 'COMPLETED' || result.status === 'PARTIAL');
+}
+
+/** Corrida completa y sincrona (la usa el CLI): reclamar + ejecutar. */
+export async function ingestStatsBomb(
+  pool: Pool,
+  params: IngestParams,
+  deps: IngestDeps = {},
+): Promise<IngestResult> {
+  const log = deps.log ?? (() => {});
+  const run = await claimRun(pool, params);
+  if (run.claim !== 'started') {
+    log(`run ${run.claim} for this idempotency key, skipping`, { runId: run.runId });
+    const status: RunStatus = run.claim === 'completed' ? 'COMPLETED' : 'RUNNING';
+    return { runId: run.runId, status, processed: 0, rejected: 0, skipped: true };
+  }
+  return executeRun(pool, run, params, deps);
+}
+
+/** Lo que necesitan las rutas HTTP: inyectable, para probarlas sin BD ni red. */
+export interface IngestionRunner {
+  claim(params: IngestParams): Promise<ClaimedRun>;
+  execute(run: ClaimedRun, params: IngestParams): Promise<IngestResult>;
+}
+
+export function createIngestionRunner(pool: Pool, deps: IngestDeps = {}): IngestionRunner {
+  return {
+    claim: (params) => claimRun(pool, params),
+    execute: (run, params) => executeRun(pool, run, params, deps),
+  };
 }
 
 async function persist(

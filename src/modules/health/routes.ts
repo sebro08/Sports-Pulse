@@ -9,11 +9,15 @@ interface HealthOptions {
 
 export const healthRoutes: FastifyPluginAsync<HealthOptions> = async (app, { db, cache }) => {
   // Liveness: el proceso responde. No toca dependencias.
-  app.get('/health/live', async () => ({ status: 'ok' }));
+  // Sin rate limit: la plataforma (Container Apps) consulta los probes cada pocos segundos
+  // desde la misma IP; limitarlos podria hacer que reinicie contenedores sanos.
+  const config = { rateLimit: false };
+
+  app.get('/health/live', { config }, async () => ({ status: 'ok' }));
 
   // Readiness: solo PostgreSQL es critico. Redis caido degrada rendimiento, no
   // disponibilidad, asi que se informa pero NUNCA produce un 503 por si solo.
-  app.get('/health/ready', async (req, reply) => {
+  app.get('/health/ready', { config }, async (req, reply) => {
     const redisUp = await cache.ping();
     try {
       await db.ping();

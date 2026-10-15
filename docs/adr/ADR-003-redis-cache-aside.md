@@ -1,5 +1,9 @@
 # ADR-003: Redis cache-aside with graceful degradation, no explicit invalidation yet
 
+> **Status:** accepted; the "TTL only, no invalidation" part is **superseded by
+> [ADR-005](ADR-005-async-ingestion-and-cache-invalidation.md)** (version-based invalidation). The
+> pattern, keys, TTLs and graceful-degradation rules below still apply.
+
 ## Context
 The catalog read endpoints query PostgreSQL on every request. Football historical data changes
 rarely (only when an ingestion run completes), so most reads are served from data that has not
