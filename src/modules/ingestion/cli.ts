@@ -1,9 +1,11 @@
 import { parseArgs } from 'node:util';
 import { z } from 'zod';
+import { bumpDatasetVersion } from '../../shared/cache/dataset-version.js';
+import { createRedisCache } from '../../shared/cache/client.js';
 import { loadEnv } from '../../shared/config/env.js';
 import { createPool } from '../../shared/database/pool.js';
 import { fetchJson } from './http.js';
-import { ingestStatsBomb } from './service.js';
+import { changedData, ingestStatsBomb } from './service.js';
 import { competitionsUrl } from './sources/statsbomb/client.js';
 import { competitionEntrySchema } from './sources/statsbomb/schemas.js';
 import { parseRecords } from './validation.js';
@@ -37,14 +39,29 @@ async function main(): Promise<number> {
 
   const competitionId = id.parse(values.competition);
   const seasonId = id.parse(values.season);
-  const pool = createPool(loadEnv());
+  const env = loadEnv();
+  const pool = createPool(env);
+  const log = (msg: string, data?: Record<string, unknown>) =>
+    console.log(JSON.stringify({ msg, ...data }));
   try {
     const result = await ingestStatsBomb(
       pool,
-      { competitionId, seasonId, ...(values.key ? { idempotencyKey: values.key } : {}) },
-      { log: (msg, data) => console.log(JSON.stringify({ msg, ...data })) },
+      {
+        competitionId,
+        seasonId,
+        triggeredBy: 'cli',
+        ...(values.key ? { idempotencyKey: values.key } : {}),
+      },
+      { log },
     );
     console.log(JSON.stringify(result, null, 2));
+    if (changedData(result)) {
+      // Igual que el endpoint HTTP: si hubo datos nuevos, invalida el cache del catalogo.
+      const { cache, close } = createRedisCache(env);
+      const version = await bumpDatasetVersion(cache);
+      await close();
+      log(version === undefined ? 'cache not invalidated (redis unavailable, TTL applies)' : 'catalog cache invalidated', { datasetVersion: version });
+    }
     return result.status === 'FAILED' ? 1 : 0;
   } finally {
     await pool.end();

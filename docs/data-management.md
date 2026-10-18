@@ -10,15 +10,18 @@
 | Data | Class | Exposed by API |
 |---|---|---|
 | Competitions, seasons, teams, matches | PUBLIC | Yes |
-| `ingestion_runs`, `ingestion_run_id`, `external_id` | INTERNAL | No |
-| Database credentials, API keys | SECRET | Never (Key Vault in production) |
+| `ingestion_runs`, `ingestion_run_id`, `external_id` | INTERNAL | Runs only to ADMIN / SYSTEM (`GET /api/v1/ingestion/:id`) |
+| Token subjects (`triggered_by`) | INTERNAL | Same as above; never logged with the token itself |
+| Database credentials, `AUTH_JWT_SECRET`, tokens | SECRET | Never (Key Vault in production; `Authorization` is redacted from logs) |
 
 No personal data is stored. Only what the MVP needs is ingested (no events or line-ups yet).
 
 ## Ingestion
+- Entry points: `npm run ingest` (CLI) and `POST /api/v1/ingestion` (ADMIN / SYSTEM, asynchronous).
+  Both record who started the run in `ingestion_runs.triggered_by`.
 - Flow: catalog -> matches -> per-record Zod validation -> single transaction -> upserts.
 - **Idempotent:** `UNIQUE(source_id, idempotency_key)` + `ON CONFLICT DO UPDATE`. A COMPLETED run with the same
-  key is skipped; FAILED/PARTIAL runs are retried.
+  key is skipped; FAILED/PARTIAL runs are retried; a RUNNING run blocks duplicates (stale after 15 min).
 - Default key: `statsbomb:c{competition}:s{season}:{date}`; override with `--key`.
 - States: RUNNING -> COMPLETED | PARTIAL (some records rejected) | FAILED.
 - HTTP resilience: timeout, exponential backoff with jitter, `Retry-After` honored; retries only timeouts,

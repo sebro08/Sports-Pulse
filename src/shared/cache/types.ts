@@ -9,5 +9,9 @@ export interface Cache {
   get(key: string): Promise<string | undefined>;
   set(key: string, value: string, ttlSeconds: number): Promise<void>;
   del(key: string): Promise<void>;
+  /** Lee un contador entero: 0 si no existe, `undefined` si el cache no esta disponible. */
+  counter(key: string): Promise<number | undefined>;
+  /** Incrementa un contador y devuelve el nuevo valor, o `undefined` si el cache fallo. */
+  incr(key: string): Promise<number | undefined>;
   ping(): Promise<boolean>;
 }

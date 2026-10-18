@@ -20,7 +20,7 @@ erDiagram
 | Table | Purpose | Notable constraints |
 |---|---|---|
 | `data_sources` | Origin of data | `code` unique |
-| `ingestion_runs` | One row per ingestion run | `UNIQUE(source_id, idempotency_key)`; status `CHECK`; `finished_at >= started_at` |
+| `ingestion_runs` | One row per ingestion run, incl. `triggered_by` (token `sub` or `cli`) | `UNIQUE(source_id, idempotency_key)`; status `CHECK`; `finished_at >= started_at` |
 | `competitions` | Leagues / tournaments | `UNIQUE(source_id, external_id)` |
 | `seasons` | Editions of a competition | FK to competition (cascade); `end_date >= start_date` |
 | `teams` | Clubs / national teams | `UNIQUE(source_id, external_id)` |
@@ -30,6 +30,10 @@ erDiagram
 
 - **Idempotent ingestion:** natural keys `(source_id, external_id)` + `INSERT ... ON CONFLICT DO UPDATE`.
   Re-running never duplicates rows.
+- **Atomic run claim:** `startRun` is a single `INSERT ... ON CONFLICT DO UPDATE ... WHERE` that only
+  takes over a key whose run is `PENDING`/`FAILED`/`PARTIAL`, or `RUNNING` for more than 15 minutes
+  (abandoned). Concurrent requests with the same key can't both start a run.
+- **Audit:** `ingestion_runs.triggered_by` (migration `002`) records who started each run.
 - **Lineage:** `matches.ingestion_run_id` records which run produced/updated each row (INTERNAL, not exposed by the API).
 - **Indexes:** `matches(season_id, kickoff_at)`, `matches(home_team_id)`, `matches(away_team_id)`,
   `seasons(competition_id)`, plus the unique indexes above.

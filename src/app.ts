@@ -1,3 +1,4 @@
+import fastifyRateLimit from '@fastify/rate-limit';
 import fastifySwagger from '@fastify/swagger';
 import fastifySwaggerUi from '@fastify/swagger-ui';
 import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
@@ -6,9 +7,13 @@ import { ZodError } from 'zod';
 import type { CacheTtl } from './modules/catalog/service.js';
 import { catalogRoutes } from './modules/catalog/routes.js';
 import { healthRoutes } from './modules/health/routes.js';
+import { ingestionRoutes } from './modules/ingestion/routes.js';
+import type { IngestionRunner } from './modules/ingestion/service.js';
+import { authenticate } from './shared/auth/hooks.js';
+import type { TokenVerifier } from './shared/auth/jwt.js';
 import type { Cache } from './shared/cache/types.js';
 import type { Database } from './shared/database/pool.js';
-import { AppError } from './shared/http/errors.js';
+import { AppError, RateLimitError } from './shared/http/errors.js';
 import {
   jsonSchemaTransform,
   serializerCompiler,
@@ -19,12 +24,20 @@ export interface AppDeps {
   db: Pick<Database, 'ping' | 'query'>;
   cache: Cache;
   cacheTtl?: CacheTtl;
+  /** Verifica tokens Bearer. Sin el, la auth queda "cerrada": toda ruta protegida responde 401. */
+  verifyToken?: TokenVerifier;
+  /** Ejecuta ingestas. Sin el, los endpoints /api/v1/ingestion no se registran. */
+  ingestion?: IngestionRunner;
 }
 
 export interface AppOptions {
   logLevel?: string;
   /** Expone Swagger UI en /docs y la especificacion en /docs/json. */
   docs?: boolean;
+  /** Limite global por IP; `false` lo desactiva (p. ej. en tests que no lo prueban). */
+  rateLimit?: { max: number; windowSeconds: number } | false;
+  /** Confiar en X-Forwarded-For (solo detras de un proxy/ingress de confianza). */
+  trustProxy?: boolean;
 }
 
 interface Detail {
@@ -57,6 +70,7 @@ export function buildApp(deps: AppDeps, opts: AppOptions = {}): FastifyInstance 
     },
     bodyLimit: 1_048_576, // 1 MiB
     requestTimeout: 30_000,
+    trustProxy: opts.trustProxy ?? false,
   });
 
   app.setValidatorCompiler(validatorCompiler);
@@ -65,6 +79,24 @@ export function buildApp(deps: AppDeps, opts: AppOptions = {}): FastifyInstance 
   app.addHook('onSend', async (req, reply) => {
     reply.header('x-request-id', req.id);
   });
+
+  // Orden de defensa en cada request (ver docs/security.md):
+  //   onRequest     -> rate limit por IP (lo mas barato primero: frena abuso antes de gastar CPU)
+  //   preValidation -> autenticacion (verifica el token si viene; si no, request PUBLIC)
+  //   validation    -> Zod sobre params/query/body
+  //   preHandler    -> autorizacion por ruta (requirePermission)
+  app.decorateRequest('principal', undefined);
+  app.addHook('preValidation', authenticate(deps.verifyToken));
+
+  const rateLimit = opts.rateLimit ?? { max: 100, windowSeconds: 60 };
+  if (rateLimit) {
+    app.register(fastifyRateLimit, {
+      max: rateLimit.max,
+      timeWindow: rateLimit.windowSeconds * 1000,
+      // Se lanza como AppError para que la respuesta 429 tenga el mismo formato que el resto.
+      errorResponseBuilder: (_req, ctx) => new RateLimitError(ctx.after),
+    });
+  }
 
   app.setErrorHandler((err: FastifyError, req, reply) => {
     const send = (status: number, code: string, message: string, details?: Detail[]) =>
@@ -101,7 +133,13 @@ export function buildApp(deps: AppDeps, opts: AppOptions = {}): FastifyInstance 
           description:
             'Read API for football data. Source: StatsBomb Open Data (attribution required).',
         },
-        tags: [{ name: 'catalog', description: 'Competitions, seasons, teams and matches' }],
+        tags: [
+          { name: 'catalog', description: 'Competitions, seasons, teams and matches (public)' },
+          { name: 'ingestion', description: 'Admin: trigger and inspect ingestion runs' },
+        ],
+        components: {
+          securitySchemes: { bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' } },
+        },
       },
       transform: jsonSchemaTransform,
     });
@@ -112,6 +150,14 @@ export function buildApp(deps: AppDeps, opts: AppOptions = {}): FastifyInstance 
 
   app.register(healthRoutes, { db: deps.db, cache: deps.cache });
   app.register(catalogRoutes, { db: deps.db, cache: deps.cache, ttl, prefix: '/api/v1' });
+  if (deps.ingestion) {
+    app.register(ingestionRoutes, {
+      db: deps.db,
+      cache: deps.cache,
+      runner: deps.ingestion,
+      prefix: '/api/v1',
+    });
+  }
 
   return app;
 }

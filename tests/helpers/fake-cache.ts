@@ -33,6 +33,16 @@ export function fakeCache(opts: FakeCacheOptions = {}): FakeCache {
       if (opts.fail) throw new Error('redis down');
       store.delete(key);
     },
+    async counter(key) {
+      if (opts.fail) throw new Error('redis down');
+      return Number(store.get(key) ?? 0);
+    },
+    async incr(key) {
+      if (opts.fail) throw new Error('redis down');
+      const next = Number(store.get(key) ?? 0) + 1;
+      store.set(key, String(next));
+      return next;
+    },
     async ping() {
       return !opts.fail;
     },

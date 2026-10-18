@@ -5,6 +5,7 @@ export interface RedisLike {
   get(key: string): Promise<string | null>;
   set(key: string, value: string, mode: 'EX', ttlSeconds: number): Promise<unknown>;
   del(key: string): Promise<unknown>;
+  incr(key: string): Promise<number>;
   ping(): Promise<unknown>;
 }
 
@@ -39,6 +40,23 @@ export function wrapRedis(client: RedisLike, log: Logger = () => {}): Cache {
         log('cache del failed', { key, err: err instanceof Error ? err.message : String(err) });
       }
     },
+    async counter(key) {
+      try {
+        const value = await client.get(key);
+        return value === null ? 0 : Number(value);
+      } catch (err) {
+        log('cache counter failed', { key, err: err instanceof Error ? err.message : String(err) });
+        return undefined;
+      }
+    },
+    async incr(key) {
+      try {
+        return await client.incr(key);
+      } catch (err) {
+        log('cache incr failed', { key, err: err instanceof Error ? err.message : String(err) });
+        return undefined;
+      }
+    },
     async ping() {
       try {
         await client.ping();
@@ -58,6 +76,12 @@ export function nullCache(): Cache {
     },
     async set() {},
     async del() {},
+    async counter() {
+      return undefined;
+    },
+    async incr() {
+      return undefined;
+    },
     async ping() {
       return false;
     },

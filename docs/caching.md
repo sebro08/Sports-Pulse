@@ -13,7 +13,8 @@ sequenceDiagram
   participant R as Redis
   participant DB as PostgreSQL
   C->>S: GET /api/v1/matches?seasonId=1
-  S->>R: GET v1:matches:seasonId=1&...
+  S->>R: GET v1:dataset-version (e.g. 7)
+  S->>R: GET v1:d7:matches:seasonId=1&...
   alt hit
     R-->>S: cached JSON
     S-->>C: 200 (no DB query)
@@ -28,10 +29,36 @@ sequenceDiagram
 
 ## Keys and TTL
 
-- Key: `v1:<resource>:<param>=<value>&...`, params alphabetically sorted so that the same filters in
-  any order hit the same entry. Built by `cacheKey()`.
+- Key: `v1:d<version>:<resource>:<param>=<value>&...`, params alphabetically sorted so that the same
+  filters in any order hit the same entry. Built by `cacheKey()`; `<version>` is the dataset version.
 - TTL: `CACHE_TTL_LIST_SECONDS` (default 60s) for list endpoints, `CACHE_TTL_DETAIL_SECONDS` (default
-  120s) for single-resource endpoints. No explicit invalidation yet; see ADR-003 for the trade-off.
+  120s) for single-resource endpoints.
+
+## Invalidation (dataset version)
+
+Implemented in `src/shared/cache/dataset-version.ts`; rationale in
+[ADR-005](adr/ADR-005-async-ingestion-and-cache-invalidation.md).
+
+```mermaid
+sequenceDiagram
+  participant I as Ingestion (POST /ingestion or CLI)
+  participant DB as PostgreSQL
+  participant R as Redis
+  participant S as catalog service
+  I->>DB: BEGIN; upserts; COMMIT
+  I->>R: INCR v1:dataset-version (7 -> 8)
+  S->>R: GET v1:dataset-version = 8
+  S->>R: GET v1:d8:teams:... (miss: key never existed)
+  S->>DB: fresh SELECT
+  Note over R: v1:d7:* keys are never read again and expire by TTL
+```
+
+- One `INCR` invalidates the whole catalog, no matter how many keys exist.
+- Only runs that commit data (`COMPLETED`, `PARTIAL`) bump the version; `FAILED` and skipped runs don't.
+- If the version can't be read, the request skips the cache and reads PostgreSQL directly.
+
+Check it locally: `docker compose exec redis redis-cli get v1:dataset-version` before and after an
+ingestion, and `redis-cli --scan --pattern 'v1:d*'` to see keys of both versions.
 
 ## Graceful degradation
 
@@ -48,6 +75,8 @@ failing cache and checks it still returns `200` with correct data.
 
 ## Known limitations
 
-- No active invalidation on write (ingestion does not clear affected keys); staleness is bounded by TTL only.
+- If Redis is unreachable at the moment an ingestion finishes, the `INCR` is lost and data can be stale
+  until TTL (the TTL remains the safety net).
+- Every catalog read does one extra Redis `GET` for the version.
 - No cache hit/miss metrics yet (planned for the observability phase).
 - Single Redis instance; no cluster/HA configuration (fine for a portfolio project, revisit for production).

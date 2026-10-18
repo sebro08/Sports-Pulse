@@ -6,8 +6,8 @@ project, with reliability, security and operability treated as first-class featu
 **Azure** (Container Apps, PostgreSQL Flexible Server, Cache for Redis, Key Vault, Application
 Insights) provisioned with Terraform and deployed through GitHub Actions.
 
-> **Status:** MVP in progress. Local development, ingestion, the read API and caching work end to
-> end. Cloud deployment, auth and observability are on the roadmap below.
+> **Status:** MVP in progress. Local development, ingestion, the read API, caching, authentication
+> and rate limiting work end to end. Cloud deployment and observability are on the roadmap below.
 
 ## What works today
 
@@ -15,6 +15,15 @@ Insights) provisioned with Terraform and deployed through GitHub Actions.
   consistent errors and request IDs.
 - **Redis cache-aside**: list/detail responses are cached with TTL; a Redis outage degrades to
   PostgreSQL-only reads instead of breaking the API (see [ADR-003](docs/adr/ADR-003-redis-cache-aside.md)).
+  An ingestion that writes data invalidates the whole catalog cache with one `INCR`
+  ([ADR-005](docs/adr/ADR-005-async-ingestion-and-cache-invalidation.md)).
+- **Authentication & RBAC**: JWT bearer tokens (dev secret locally, JWKS / Entra ID in production),
+  roles `PUBLIC` / `USER` / `ADMIN` / `SYSTEM` mapped to permissions, fail-closed by default
+  ([ADR-004](docs/adr/ADR-004-auth-rbac-rate-limiting.md)).
+- **Admin ingestion endpoint**: `POST /api/v1/ingestion` (asynchronous `202` + polling, idempotent,
+  audited with who triggered it) and `GET /api/v1/ingestion/:id`.
+- **Rate limiting**: per client IP (100/min by default, 5/min on the ingestion trigger), uniform `429`
+  errors with `Retry-After`.
 - **Interactive docs**: OpenAPI 3 generated from the same Zod schemas that validate requests (`/docs`).
 - **Ingestion** from StatsBomb Open Data: retries with exponential backoff + jitter, per-record validation,
   transactional and idempotent writes, run tracking (`ingestion_runs`).
@@ -31,6 +40,8 @@ Insights) provisioned with Terraform and deployed through GitHub Actions.
 | Validation & contracts | Zod (single source of truth for validation, types and OpenAPI) |
 | Database | PostgreSQL 16 via `pg` (parameterized queries only) |
 | Cache | Redis via `ioredis`, cache-aside pattern |
+| Auth | JWT via `jose` (HS256 locally, RS256 + JWKS in production) |
+| Rate limiting | `@fastify/rate-limit` |
 | Tests | Vitest |
 | Containers | Docker (multi-stage, non-root), Docker Compose for local dev |
 | CI | GitHub Actions |
@@ -57,13 +68,14 @@ flowchart LR
 src/
   modules/
     catalog/      read API: routes -> service (cache-aside) -> repository, Zod schemas
-    ingestion/    HTTP client, validation, repository, service, CLI, sources/statsbomb
+    ingestion/    admin routes, HTTP client, validation, repository, service, CLI, sources/statsbomb
     health/       liveness and readiness probes
   shared/
     config/       environment validation
     database/     pool, migrations runner, query helpers
-    cache/        Redis wrapper (never throws), cache-aside helper
+    cache/        Redis wrapper (never throws), cache-aside helper, dataset version
     http/         errors, pagination, Zod <-> Fastify adapter
+    auth/         JWT verification, RBAC (roles -> permissions), Fastify hooks, dev-token CLI
   app.ts          app factory (composition)
   server.ts       process entry point
 db/migrations/    versioned SQL
@@ -78,11 +90,20 @@ Requirements: Node.js 22+, Docker.
 
 ```bash
 cp .env.example .env     # set DATABASE_*; DATABASE_HOST=127.0.0.1, REDIS_HOST=127.0.0.1
+                         # and AUTH_JWT_SECRET (32+ random chars, command in .env.example)
 docker compose up -d     # PostgreSQL + Redis
 npm install
 npm run migrate          # apply db/migrations
 npm run ingest           # load FIFA World Cup 2018 (competition 43, season 3)
 npm run dev               # http://localhost:3000
+```
+
+Admin endpoints need a token. Locally, mint one and trigger an ingestion over HTTP:
+
+```bash
+TOKEN=$(npm run -s token -- --role ADMIN --sub your-name)
+curl -X POST localhost:3000/api/v1/ingestion -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" -d '{"competitionId":43,"seasonId":3}'
 ```
 
 Useful commands: `npm test`, `npm run lint`, `npm run typecheck`, `npm run ingest -- --list`
@@ -104,10 +125,12 @@ Interactive documentation at **`/docs`** (spec at `/docs/json`). Full convention
 | GET | `/api/v1/teams/:id` | Team detail |
 | GET | `/api/v1/matches` | List matches (`seasonId`, `teamId`, `status`, `from`, `to`, `sort`) |
 | GET | `/api/v1/matches/:id` | Match detail |
+| POST | `/api/v1/ingestion` | Start an ingestion run (ADMIN / SYSTEM) — `202` + `statusUrl` |
+| GET | `/api/v1/ingestion/:id` | Ingestion run status (ADMIN / SYSTEM) |
 | GET | `/health/live`, `/health/ready` | Probes |
 
-All list endpoints accept `page` and `pageSize` (max 100). All are cached (see
-[docs/caching.md](docs/caching.md)).
+Catalog endpoints are public; list endpoints accept `page` and `pageSize` (max 100) and are cached (see
+[docs/caching.md](docs/caching.md)). Auth, roles and error codes: [docs/api.md](docs/api.md).
 
 ## Data and attribution
 
@@ -119,9 +142,11 @@ No personal data is stored. See [docs/data-management.md](docs/data-management.m
 
 Implemented: validated configuration (no secrets in Git), Zod validation on every input, parameterized SQL
 with whitelisted sort columns, LIKE-wildcard escaping, fixed allow-listed ingestion URLs (SSRF-safe), request
-size limit, uniform errors that never leak internals, non-root container, dependency audit in CI.
-Planned: authentication/RBAC for admin endpoints, rate limiting, Key Vault + Managed Identity, least-privilege
-database roles, CodeQL / Trivy, threat model. Reporting policy in [SECURITY.md](SECURITY.md).
+size limit, uniform errors that never leak internals, non-root container, dependency audit in CI, JWT
+authentication with pinned algorithm/issuer/audience, permission-based RBAC (fail closed), per-IP rate
+limiting, audit of who triggers ingestions.
+Planned: Key Vault + Managed Identity, least-privilege database roles, distributed rate-limit store,
+CodeQL / Trivy, STRIDE threat model. Reporting policy in [SECURITY.md](SECURITY.md).
 
 ## Roadmap
 
@@ -130,7 +155,7 @@ database roles, CodeQL / Trivy, threat model. Reporting policy in [SECURITY.md](
 - [x] Modular structure with enforced boundaries
 - [x] Read API + OpenAPI
 - [x] Redis cache-aside with graceful degradation
-- [ ] Auth, RBAC and admin ingestion endpoint; rate limiting
+- [x] Auth, RBAC and admin ingestion endpoint; rate limiting; cache invalidation on ingestion
 - [ ] Terraform + Azure deployment; Key Vault / Managed Identity
 - [ ] Full CI/CD (CodeQL, Trivy, staged deploys)
 - [ ] Observability (structured logs, metrics, Application Insights)
